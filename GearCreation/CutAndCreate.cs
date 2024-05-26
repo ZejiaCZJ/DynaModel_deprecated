@@ -160,7 +160,7 @@ namespace DynaModel.GearCreation
         {
             pManager.AddGenericParameter("Button", "B", "Button to create gear", GH_ParamAccess.item);
             pManager.AddGenericParameter("Essentials", "E", "The essential that contains: main model, cutter, cutter plane, cutter thickness, cutted models", GH_ParamAccess.item);
-            pManager.AddNumberParameter("Gear Ratio", "R", "Speed for the end gear", GH_ParamAccess.item);
+            pManager.AddTextParameter("Gear Speed", "S", "Speed for the end gear", GH_ParamAccess.item);
         }
 
         /// <summary>
@@ -177,12 +177,15 @@ namespace DynaModel.GearCreation
         protected override void SolveInstance(IGH_DataAccess DA)
         {
             bool isPressed = false;
+            string ratioText = "NA";
             if (!DA.GetData(0, ref isPressed))
                 return;
             if (!DA.GetData(1, ref original_essentials))
                 return;
-            if (!DA.GetData(2, ref ratio))
+            if (!DA.GetData(2, ref ratioText))
                 return;
+
+            ratio = Double.Parse(ratioText);
 
             if (isPressed)
             {

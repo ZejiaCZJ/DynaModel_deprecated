@@ -104,7 +104,8 @@ namespace DynaModel.GearCreation
         /// </summary>
         protected override void RegisterInputParams(GH_Component.GH_InputParamManager pManager)
         {
-            pManager.AddGenericParameter("Button", "B", "Button to create cutter", GH_ParamAccess.item);
+            pManager.AddGenericParameter("Start Button", "SB", "Button to create cutter", GH_ParamAccess.item);
+            pManager.AddGenericParameter("Output Type", "Output", "The output type of the parameter", GH_ParamAccess.item);
         }
 
         /// <summary>
@@ -122,11 +123,13 @@ namespace DynaModel.GearCreation
         protected override void SolveInstance(IGH_DataAccess DA)
         {
             bool isPressed = false;
+            string outputType = "NA";
             if (!DA.GetData(0, ref isPressed))
-            {
                 return;
-            }
-            if (isPressed)
+            if (!DA.GetData(1, ref outputType))
+                return;
+
+            if (isPressed && outputType.Equals("Rotational Motion"))
             {
 
                 Brep brep = SelectGearExit(out Plane cutterPlane);

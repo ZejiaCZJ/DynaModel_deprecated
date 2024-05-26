@@ -159,7 +159,7 @@ namespace DynaModel.PipeCreation
             if(!DA.GetData(2, ref outputType))
                 return;
 
-            if (startButtonClicked)
+            if (startButtonClicked && outputType.Equals("LED Light"))
             {
                 var rc = RhinoGet.GetOneObject("Select a model (geometry): ", false, ObjectType.AnyObject, out ObjRef currObjRef);
                 if (rc == Rhino.Commands.Result.Success)
@@ -384,7 +384,6 @@ namespace DynaModel.PipeCreation
                     #endregion
 
                 }
-
 
 
 
