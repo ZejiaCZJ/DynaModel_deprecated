@@ -8,6 +8,7 @@ using Rhino.DocObjects;
 using ObjRef = Rhino.DocObjects.ObjRef;
 using System.CodeDom;
 using DynaModel.Geometry;
+using System.Windows.Forms;
 
 namespace DynaModel.GearCreation
 {
@@ -16,6 +17,8 @@ namespace DynaModel.GearCreation
         RhinoDoc myDoc = RhinoDoc.ActiveDoc;
         private static double old_factor = 1.0;
         private static double old_thickness = 1.0;
+        private static Essentials original_essentials = null;
+        private static Essentials essentials = null;
 
         /// <summary>
         /// Initializes a new instance of the MyComponent1 class.
@@ -51,48 +54,51 @@ namespace DynaModel.GearCreation
         /// <param name="DA">The DA object is used to retrieve from inputs and store in outputs.</param>
         protected override void SolveInstance(IGH_DataAccess DA)
         {
-            Essentials original_essentials = new Essentials();
             double factor = 1;
             double thickness = 1;
 
             if (!DA.GetData(0, ref original_essentials))
-                return;
+            {
+                original_essentials = null;
+            }
             if (!DA.GetData(1, ref factor))
                 return;
             if (!DA.GetData(2, ref thickness))
                 return;
 
-            Essentials essentials = original_essentials.Duplicate(original_essentials);
+            if (original_essentials != null)
+                essentials = original_essentials.Duplicate(original_essentials);
 
-            ObjRef objRef = new ObjRef(myDoc, essentials.Cutter);
-            Brep cutter = objRef.Brep();
-
-
-            double new_factor = factor / old_factor;
-            double new_thickness = thickness / old_thickness;
-
-            Point3d center = cutter.GetBoundingBox(true).Center;
-            Transform centerTrans = Transform.Scale(center, new_factor);
-
-            if (new_factor == 1)
+            if (essentials != null && TrueButtonValueController.finished == 0)
             {
-                Transform thicknessTrans = Transform.Scale(essentials.CutterPlane, 1, 1, new_thickness);
-                myDoc.Objects.Transform(objRef, thicknessTrans, true);
-                essentials.CutterThickness = essentials.CutterThickness * new_thickness;
+                ObjRef objRef = new ObjRef(myDoc, essentials.Cutter);
+                Brep cutter = objRef.Brep();
+
+
+                double new_factor = factor / old_factor;
+                double new_thickness = thickness / old_thickness;
+
+                Point3d center = cutter.GetBoundingBox(true).Center;
+                Transform centerTrans = Transform.Scale(center, new_factor);
+
+                if (new_factor == 1)
+                {
+                    Transform thicknessTrans = Transform.Scale(essentials.CutterPlane, 1, 1, new_thickness);
+                    myDoc.Objects.Transform(objRef, thicknessTrans, true);
+                    essentials.CutterThickness = essentials.CutterThickness * new_thickness;
+                }
+                else
+                {
+                    myDoc.Objects.Transform(objRef, centerTrans, true);
+                    essentials.CutterThickness = essentials.CutterThickness * new_factor;
+                }
+
+
+                DA.SetData(0, essentials);
+
+                old_factor = factor;
+                old_thickness = thickness;
             }
-            else
-            {
-                myDoc.Objects.Transform(objRef, centerTrans, true);
-                essentials.CutterThickness = essentials.CutterThickness * new_factor;
-            }
-
-
-
-
-            DA.SetData(0, essentials);
-
-            old_factor = factor;
-            old_thickness = thickness;
         }
 
         /// <summary>

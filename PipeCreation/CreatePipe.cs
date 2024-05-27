@@ -224,7 +224,8 @@ namespace DynaModel.PipeCreation
                                 foreach (Curve curve in intersectionCurves)
                                 {
                                     Double[] curveParams = curve.DivideByLength(2, true, out Point3d[] points);
-                                    surfacePts.AddRange(points);
+                                    if(curveParams != null && curveParams.Length > 0)
+                                        surfacePts.AddRange(points);
                                 }
                             }
                         }
@@ -299,6 +300,7 @@ namespace DynaModel.PipeCreation
                     #region Generate Pipe based on the required input and output of the parameter
                     if(outputType.Equals("LED Light"))
                     {
+                        RhinoApp.WriteLine($"{RhinoMath.SqrtEpsilon}");
                         #region Get the line that don't combine all gears ---> bestRoute1
                         Point3d customized_part_center = customized_part.GetBoundingBox(true).Center;
                         GetVoxelSpace(customized_part, currModel, 1);
@@ -314,14 +316,21 @@ namespace DynaModel.PipeCreation
                         }
 
                         Point3d pipeExit = new Point3d();
+                        bool allTaken = true;
                         foreach (var item in pipeExitPts)
                         {
-                            if (item.isTaken == false)
+                            if (item.isTaken == false && item.location.isTaken == false)
                             {
-                                pipeExit = item.location;
+                                pipeExit = new Point3d(item.location.X, item.location.Y, item.location.Z);
                                 item.isTaken = true;
+                                allTaken = false;
                                 break;
                             }
+                        }
+                        if (allTaken)
+                        {
+                            RhinoApp.WriteLine("All pipe exits are taken, or covered. Unable to create anymore LED light parameters");
+                            return;
                         }
 
                         List<Point3d> bestRoute1 = FindShortestPath(customized_part_center, pipeExit, customized_part, currModel);
@@ -696,21 +705,85 @@ namespace DynaModel.PipeCreation
             double offset = 2; //This offset stands for the gap between the edge of the PCB and the pipe exit
 
             //Left upper corner of the PCB
-            PipeExit leftUpperCorner = new PipeExit(new Point3d(base_part_center.X - pcbWidth / 2 + pipeRadius + offset, base_part_center.Y + pcbHeight / 2 - pipeRadius - offset, base_part_center.Z));
+            Point3d leftUpperCorner = new Point3d(base_part_center.X - pcbWidth / 2 + pipeRadius + offset, base_part_center.Y + pcbHeight / 2 - pipeRadius - offset, base_part_center.Z);
 
             //Right upper corner of the PCB
-            PipeExit rightUpperCorner = new PipeExit(new Point3d(base_part_center.X + pcbWidth / 2 - pipeRadius - offset, base_part_center.Y + pcbHeight / 2 - pipeRadius - offset, base_part_center.Z));
+            Point3d rightUpperCorner = new Point3d(base_part_center.X + pcbWidth / 2 - pipeRadius - offset, base_part_center.Y + pcbHeight / 2 - pipeRadius - offset, base_part_center.Z);
 
             //Left lower corner of the PCB
-            PipeExit leftLowerCorner = new PipeExit(new Point3d(base_part_center.X - pcbWidth / 2 + pipeRadius + offset, base_part_center.Y - pcbHeight / 2 + pipeRadius + offset, base_part_center.Z));
+            Point3d leftLowerCorner = new Point3d(base_part_center.X - pcbWidth / 2 + pipeRadius + offset, base_part_center.Y - pcbHeight / 2 + pipeRadius + offset, base_part_center.Z);
 
             //Right lower corner of the PCB
-            PipeExit rightLowerCorner = new PipeExit(new Point3d(base_part_center.X + pcbWidth / 2 - pipeRadius - offset, base_part_center.Y - pcbHeight / 2 + pipeRadius + offset, base_part_center.Z));
+            Point3d rightLowerCorner = new Point3d(base_part_center.X + pcbWidth / 2 - pipeRadius - offset, base_part_center.Y - pcbHeight / 2 + pipeRadius + offset, base_part_center.Z);
 
-            pipeExitPts.Add(leftUpperCorner);
-            pipeExitPts.Add(rightUpperCorner);
-            pipeExitPts.Add(leftLowerCorner);
-            pipeExitPts.Add(rightLowerCorner);
+            Index lu = FindClosestPointIndex(leftUpperCorner, currModel);
+            Index ru = FindClosestPointIndex(rightUpperCorner, currModel);
+            Index ll = FindClosestPointIndex(leftLowerCorner, currModel);
+            Index rl = FindClosestPointIndex(rightLowerCorner, currModel);
+
+            List<Voxel> voxels = new List<Voxel>();
+            voxels.Add(voxelSpace[lu.i, lu.j, lu.k]);
+            voxels.Add(voxelSpace[ru.i, ru.j, ru.k]);
+            voxels.Add(voxelSpace[ll.i, ll.j, ll.k]);
+            voxels.Add(voxelSpace[rl.i, rl.j, rl.k]);
+
+            List<Point3d> voxels_location = new List<Point3d>();
+            voxels_location.Add(leftUpperCorner);
+            voxels_location.Add(rightUpperCorner);
+            voxels_location.Add(leftLowerCorner);
+            voxels_location.Add(rightLowerCorner);
+
+
+
+            var allObjects = new List<RhinoObject>(myDoc.Objects.GetObjectList(ObjectType.Brep));
+
+            Parallel.For(0, voxels.Count, i =>
+            {
+                foreach (var item in allObjects)
+                {
+                    Guid guid = item.Id;
+                    ObjRef currObj = new ObjRef(guid);
+                    Brep brep = currObj.Brep();
+
+
+
+                    //See if the point is strictly inside of the brep
+                    if (brep != null)
+                    {
+                        //Check if the current brep is the 3D model main body
+                        if (guid == currModelObjId)
+                        {
+                            voxels[i].isTaken = !currModel.IsPointInside(voxels_location[i], 1, false);
+                            continue;
+                        }
+
+                        if (brep.IsPointInside(voxels_location[i], myDoc.ModelAbsoluteTolerance, true))
+                        {
+                            voxels[i].isTaken = true;
+                            break;
+                        }
+                        Double maximumDistance = 4;
+                        //See if the point is too close to the brep and will cause intersection after creating the pipe
+                        if (brep.ClosestPoint(voxels_location[i]).DistanceTo(voxels_location[i]) <= maximumDistance)
+                        {
+                            voxels[i].isTaken = true;
+                            break;
+                        }
+                    }
+                }
+            });
+            
+
+
+            pipeExitPts.Add(new PipeExit(voxelSpace[lu.i, lu.j, lu.k]));
+            pipeExitPts.Add(new PipeExit(voxelSpace[ru.i, ru.j, ru.k]));
+            pipeExitPts.Add(new PipeExit(voxelSpace[ll.i, ll.j, ll.k]));
+            pipeExitPts.Add(new PipeExit(voxelSpace[rl.i, rl.j, rl.k]));
+
+            myDoc.Objects.AddPoint(leftUpperCorner);
+            myDoc.Objects.AddPoint(rightUpperCorner);
+            myDoc.Objects.AddPoint(leftLowerCorner);
+            myDoc.Objects.AddPoint(rightLowerCorner);
         }
 
         /// <summary>

@@ -9,10 +9,10 @@ namespace DynaModel.PipeCreation
 {
     public class PipeExit
     {
-        public Point3d location { get; set; }
+        public Voxel location { get; set; }
         public Boolean isTaken { get; set; }
 
-        public PipeExit(Point3d location)
+        public PipeExit(Voxel location)
         {
             this.location = location;
             this.isTaken = false;

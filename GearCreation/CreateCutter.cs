@@ -131,7 +131,7 @@ namespace DynaModel.GearCreation
 
             if (isPressed && outputType.Equals("Rotational Motion"))
             {
-
+                TrueButtonValueController.finished = 0;
                 Brep brep = SelectGearExit(out Plane cutterPlane);
 
                 if (brep != new Brep())
@@ -144,6 +144,10 @@ namespace DynaModel.GearCreation
                     essentials.MainModel = currModelObjId;
 
                     DA.SetData(0, essentials);
+                }
+                else
+                {
+                    DA.SetData(0, null);
                 }
 
 
@@ -187,7 +191,10 @@ namespace DynaModel.GearCreation
                         myDoc.Views.Redraw();
                     }
                     else
+                    {
                         RhinoApp.WriteLine("Your model cannot be fixed to become manifold and closed, please try to fix it manually");
+                    }
+                        
 
                 }
 
@@ -196,6 +203,7 @@ namespace DynaModel.GearCreation
                 if (currModel == null)
                 {
                     cutterPlane = new Plane();
+                    RhinoApp.WriteLine("Fail to select a 3D model, please try again");
                     return cutter;
                 }
 
@@ -253,62 +261,7 @@ namespace DynaModel.GearCreation
 
                 #region ask the user to select points for a cutter plane
 
-                #region Create a line that perfectly projected on the surface of the main model (Not complete) ----------------------> Commented
-                //List<Guid> cutterCurves = new List<Guid>();
-
-                //RhinoApp.WriteLine("We need to cut your model for your end effector. Please select 5 points that best describe your cutter plane ---------------------------------------------------");
-
-                //while (!end_button_clicked)
-                //{
-                //    ObjRef pointRef;
-
-                //    var getSelectedPts = RhinoGet.GetOneObject("Please select your Point " +(selectedPts.Count + 1) + ": ", false, ObjectType.Point, out pointRef);
-                //    RhinoApp.WriteLine("You selected a point at: " + pointRef.Point().Location.X + ", " + pointRef.Point().Location.Y + ", " + pointRef.Point().Location.Z);
-
-                //    if (pointRef != null)
-                //    {
-                //        Point3d tempPt = new Point3d(pointRef.Point().Location.X, pointRef.Point().Location.Y, pointRef.Point().Location.Z);
-                //        double x = pointRef.Point().Location.X;
-                //        double y = pointRef.Point().Location.Y;
-                //        double z = pointRef.Point().Location.Z;
-
-                //        //Check if the selected point is in selectedPts
-                //        //1. If so, Get rid of the bounding box
-                //        //2. If not, store the selected point and display bounding box
-
-                //        if(selectedPts.Any(pt => pt.Equals(tempPt)))
-                //        {
-                //            continue;
-                //        }
-                //        selectedPts.Add(tempPt);
-
-                //        Guid tempPt_ID = pointRef.ObjectId;
-
-
-                //        #region Display the line from selectedPts[0] to selectedPts[n]
-                //        if(selectedPts.Count > 1)
-                //        {
-
-                //            Line line = new Line(selectedPts[selectedPts.Count-2], tempPt);
-                //            Curve curve = line.ToNurbsCurve();
-                //            Vector3d direction = new Vector3d(0, 0, 1);
-
-                //            Curve[] projectedCurve = Curve.ProjectToBrep(curve, currModel, direction, myDoc.ModelAbsoluteTolerance);
-
-                //            myDoc.Objects.Add(projectedCurve[0], redAttribute);
-
-                //            //cutterCurves.Add(myDoc.Objects.Add(projectedCurve[0], redAttribute));
-                //        }
-
-                //        myDoc.Views.Redraw();
-
-                //        #endregion
-
-                //        RhinoApp.KeyboardEvent += OnKeyboardEvent;
-                //    }
-
-                //}
-                #endregion
+                
 
                 int count = 0;
                 List<Curve> cutterCurves = new List<Curve>();

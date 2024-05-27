@@ -80,7 +80,13 @@ namespace DynaModel
                 DA.SetData(2, true);
                 DA.SetData(3, false);
             }
-
+            else
+            {
+                DA.SetData(0, outputType);
+                DA.SetData(1, false);
+                DA.SetData(2, false);
+                DA.SetData(3, false);
+            }
 
         }
 

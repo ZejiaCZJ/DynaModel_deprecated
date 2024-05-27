@@ -168,6 +168,7 @@ namespace DynaModel.GearCreation
         /// </summary>
         protected override void RegisterOutputParams(GH_Component.GH_OutputParamManager pManager)
         {
+            pManager.AddBooleanParameter("Reset Button value", "B", "Button to reset", GH_ParamAccess.item);
         }
 
         /// <summary>
@@ -193,7 +194,10 @@ namespace DynaModel.GearCreation
 
                 #region Load the main model and cutter
                 if (original_essentials.Cutter == new Guid())
+                {
+                    DA.SetData(0, false);
                     return;
+                }
 
                 essentials = original_essentials.Duplicate(original_essentials);
 
@@ -276,12 +280,14 @@ namespace DynaModel.GearCreation
                         if (intersectionCurves.Length == 0)
                         {
                             RhinoApp.WriteLine("No intersection found");
+                            DA.SetData(0, false);
                             return;
                         }
 
                         if (intersectionCurves.Length > 1)
                         {
                             RhinoApp.WriteLine("Your cutter cuts more than one portion of the model. Please try to cut only one portion");
+                            DA.SetData(0, false);
                             return;
                         }
 
@@ -291,6 +297,7 @@ namespace DynaModel.GearCreation
                     else
                     {
                         RhinoApp.WriteLine("The point of the end effector that extend the pipe to the main model cannot be found. Restart and Try again.");
+                        DA.SetData(0, false);
                         return;
                     }
 
@@ -305,6 +312,7 @@ namespace DynaModel.GearCreation
                     if (!cuttedBrep[0].IsManifold || !cuttedBrep[0].IsSolid)
                     {
                         RhinoApp.WriteLine("Your model cannot be fixed to become manifold and closed, please try to fix it manually");
+                        DA.SetData(0, false);
                         return;
                     }
 
@@ -374,23 +382,35 @@ namespace DynaModel.GearCreation
                     Point3d first_driven_gear_centerPoint = rail5.To;
                     Vector3d first_driven_gear_Direction = new Vector3d(0, 0, 1);
                     Vector3d first_driven_gear_xDir = new Vector3d(0, 0, 0);
-                    double first_driven_gear_selfRotAngle = -RhinoMath.ToDegrees(Vector3d.VectorAngle(new Vector3d(rail5.Direction.X, rail5.Direction.Y, 0), new Vector3d(1, 0, 0)));
+                    double first_driven_gear_selfRotAngle = 0;
+                    if (first_driven_gear_centerPoint.X > end_gear_centerPoint.X && first_driven_gear_centerPoint.Y < end_gear_centerPoint.Y)
+                    {
+                        RhinoApp.WriteLine("first_driven_gear_centerPoint At fourth axis");
+                        first_driven_gear_selfRotAngle = -RhinoMath.ToDegrees(Vector3d.VectorAngle(new Vector3d(rail5.Direction.X, rail5.Direction.Y, 0), new Vector3d(1, 0, 0)));
+                        end_gear.Rotate(first_driven_gear_selfRotAngle - 360 / first_driven_gear_teethNum / 2);
+                    }
+                    else if (first_driven_gear_centerPoint.X > end_gear_centerPoint.X && first_driven_gear_centerPoint.Y > end_gear_centerPoint.Y)
+                    {
+                        RhinoApp.WriteLine("first_driven_gear_centerPoint At first axis");
+                        first_driven_gear_selfRotAngle = RhinoMath.ToDegrees(Vector3d.VectorAngle(new Vector3d(rail5.Direction.X, rail5.Direction.Y, 0), new Vector3d(1, 0, 0)));
+                        end_gear.Rotate(first_driven_gear_selfRotAngle - 360 / first_driven_gear_teethNum / 2);
+                    }
+                    else if (first_driven_gear_centerPoint.X < end_gear_centerPoint.X && first_driven_gear_centerPoint.Y < end_gear_centerPoint.Y)
+                    {
+                        RhinoApp.WriteLine("first_driven_gear_centerPoint At third axis");
+                        first_driven_gear_selfRotAngle = -RhinoMath.ToDegrees(Vector3d.VectorAngle(new Vector3d(rail5.Direction.X, rail5.Direction.Y, 0), new Vector3d(1, 0, 0)));
+                        end_gear.Rotate(first_driven_gear_selfRotAngle - 360 / first_driven_gear_teethNum / 2);
+                    }
+                    else if (first_driven_gear_centerPoint.X < end_gear_centerPoint.X && first_driven_gear_centerPoint.Y > end_gear_centerPoint.Y)
+                    {
+                        RhinoApp.WriteLine("first_driven_gear_centerPoint At second axis");
+                        first_driven_gear_selfRotAngle = RhinoMath.ToDegrees(Vector3d.VectorAngle(new Vector3d(rail5.Direction.X, rail5.Direction.Y, 0), new Vector3d(1, 0, 0)));
+                        end_gear.Rotate(first_driven_gear_selfRotAngle - 360 / first_driven_gear_teethNum / 2);
+                    }
                     //RhinoApp.WriteLine($"First driven gear rotated {RhinoMath.ToDegrees(Vector3d.VectorAngle(new Vector3d(rail5.Direction.X, rail5.Direction.Y, 0), new Vector3d(1, 0, 0)))} degrees");
                     double first_driven_gear_coneAngle = end_gear_coneAngle;
                     BevelGear first_driven_gear = new BevelGear(first_driven_gear_centerPoint, first_driven_gear_Direction, first_driven_gear_xDir, first_driven_gear_teethNum, module, pressure_angle, thickness, first_driven_gear_selfRotAngle, first_driven_gear_coneAngle, false);
                     #endregion
-
-                    end_gear.Rotate(first_driven_gear_selfRotAngle - 360 / first_driven_gear_teethNum / 2);
-                    //end_gear.Rotate(first_driven_gear_selfRotAngle);
-
-                    if (Intersection.BrepBrep(end_gear.Model, first_driven_gear.Model, myDoc.ModelAbsoluteTolerance, out intersectionCurves, out intersectionPoints))
-                    {
-                        if (intersectionCurves.Length > 0 || intersectionPoints.Length > 0)
-                        {
-                            first_driven_gear.Rotate(-first_driven_gear_selfRotAngle);
-                            end_gear.Rotate(-first_driven_gear_selfRotAngle + 360 / first_driven_gear_teethNum / 2);
-                        }
-                    }
 
                     #region connector gear (The gear that connects start gear and driven gear of end gear)
                     Point3d connector_gear_centerPoint = new Point3d(rail5.To.X, rail5.To.Y, start_gear_centerPoint.Z);
@@ -559,11 +579,13 @@ namespace DynaModel.GearCreation
                             if (workable_gearsets.Count > 0)
                                 break;
                             RhinoApp.WriteLine("Fail to create gear on your main model with the selected end effector.2");
+                            DA.SetData(0, false);
                             return;
                         }
                         if (!IsBrepInsideBrep(first_driven_gear.Boundingbox_big, mainModel) && !IsBrepInsideBrep(connector_gear.Boundingbox_big, mainModel) && IsBrepInsideBrep(end_gear.Boundingbox_big, mainModel) && !connector_gear.CenterPoint.Equals(new Point3d(first_driven_gear.CenterPoint.X, first_driven_gear.CenterPoint.Y, start_gear_centerPoint.Z)))
                         {
                             RhinoApp.WriteLine("Fail to create gear on your main model with the selected end effector.3");
+                            DA.SetData(0, false);
                             return;
                         }
 
@@ -792,8 +814,9 @@ namespace DynaModel.GearCreation
                     #endregion
 
                     #endregion
-
-
+                    //myDoc.Objects.Add(start_gear.Model);
+                    DA.SetData(0, false);
+                    TrueButtonValueController.finished = 1;
                 }
                 #region
                 #endregion
