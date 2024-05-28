@@ -300,25 +300,29 @@ namespace DynaModel.GearCreation
 
                 }
 
-                for (int i = 0; i < selectedPts.Count - 1; i++)
-                {
-                    Line line = new Line(selectedPts[i], selectedPts[i + 1]);
-                    cutterCurves.Add(line.ToNurbsCurve());
-                }
+                //for (int i = 0; i < selectedPts.Count - 1; i++)
+                //{
+                //    Line line = new Line(selectedPts[i], selectedPts[i + 1]);
+                //    cutterCurves.Add(line.ToNurbsCurve());
+                //}
 
-                Line line1 = new Line(selectedPts[selectedPts.Count - 1], selectedPts[0]);
-                cutterCurves.Add(line1.ToNurbsCurve());
-                Curve[] cutterCurve = Curve.JoinCurves(cutterCurves);
+                //Line line1 = new Line(selectedPts[selectedPts.Count - 1], selectedPts[0]);
+                //cutterCurves.Add(line1.ToNurbsCurve());
+                //Curve[] cutterCurve = Curve.JoinCurves(cutterCurves);
 
-                cutterPlane = new Plane();
-                cutterCurve[0].TryGetPlane(out cutterPlane);
+                //cutterPlane = new Plane();
+                //cutterCurve[0].TryGetPlane(out cutterPlane);
+
+                Circle cutterCurveCircle = new Circle(selectedPts[0], selectedPts[1], selectedPts[2]);
+                Curve cutterCurve = cutterCurveCircle.ToNurbsCurve();
+                cutterCurve.TryGetPlane(out cutterPlane);
+
+
 
 
                 Line rail = new Line(selectedPts[0], cutterPlane.Normal, 3);
-                cutter = Brep.CreateFromSweep(rail.ToNurbsCurve(), cutterCurve[0], true, myDoc.ModelAbsoluteTolerance)[0];
+                cutter = Brep.CreateFromSweep(rail.ToNurbsCurve(), cutterCurve, true, myDoc.ModelAbsoluteTolerance)[0];
                 cutter = cutter.CapPlanarHoles(myDoc.ModelAbsoluteTolerance);
-                //cutter.Flip();
-                //myDoc.Objects.Add(cutterCurve[0]);
 
                 Point3d center = cutter.GetBoundingBox(true).Center;
                 Transform centerTrans = Transform.Scale(center, 2);
