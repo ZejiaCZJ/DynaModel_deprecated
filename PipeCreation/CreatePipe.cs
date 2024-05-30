@@ -12,6 +12,7 @@ using Rhino.Collections;
 using System.Threading.Tasks;
 using Priority_Queue; //https://github.com/BlueRaja/High-Speed-Priority-Queue-for-C-Sharp
 using System.Linq;
+using System.Diagnostics.Eventing.Reader;
 
 
 namespace DynaModel.PipeCreation
@@ -300,10 +301,9 @@ namespace DynaModel.PipeCreation
                     #region Generate Pipe based on the required input and output of the parameter
                     if(outputType.Equals("LED Light"))
                     {
-                        RhinoApp.WriteLine($"{RhinoMath.SqrtEpsilon}");
                         #region Get the line that don't combine all gears ---> bestRoute1
                         Point3d customized_part_center = customized_part.GetBoundingBox(true).Center;
-                        GetVoxelSpace(customized_part, currModel, 1);
+                        GetVoxelSpace(currModel, 1, customized_part);
 
                         //Find the Pipe exit location
                         if (pipeExitPts.Count == 0)
@@ -340,11 +340,14 @@ namespace DynaModel.PipeCreation
                         #endregion
 
                         #region Get the line that combine all gears ---> bestRoute2
-                        CombineBreps(customized_part, currModel);
-                        GetVoxelSpace(customized_part, currModel, 2);
-
-                        List<Point3d> bestRoute2 = FindShortestPath(customized_part_center, pipeExit, customized_part, currModel);
-                        myDoc.Views.Redraw();
+                        List<Brep> allTempBoxes = CombineBreps(customized_part, currModel);
+                        List<Point3d> bestRoute2 = bestRoute1;
+                        if (allTempBoxes.Count > 0)
+                        {
+                            GetVoxelSpace(currModel, 2, tempBoxes : allTempBoxes);
+                            bestRoute2 = FindShortestPath(customized_part_center, pipeExit, customized_part, currModel);
+                        }
+                        voxelSpace = null;
                         #endregion
 
                         #region Determine which line is better by calculating the total angle of the route
@@ -386,8 +389,6 @@ namespace DynaModel.PipeCreation
                         myDoc.Objects.AddBrep(soluablePipe[0], soluableAttribute); //soluablePipe[1] if used CreateBooleanSplit
                         myDoc.Objects.AddBrep(lightGuidePipe[0], lightGuideAttribute);
                         #endregion
-
-
                     }
 
                     #endregion
@@ -483,7 +484,7 @@ namespace DynaModel.PipeCreation
         /// </summary>
         /// <param name="customized_part">The customized part that user wants</param>
         /// <param name="currModel">current model that the user wants to add pipe into</param>
-        private void CombineBreps(Brep customized_part, Brep currModel)
+        private List<Brep> CombineBreps(Brep customized_part, Brep currModel)
         {
             List<Brep> breps = new List<Brep>();
             var allObjects = new List<RhinoObject>(myDoc.Objects.GetObjectList(ObjectType.Brep));
@@ -506,6 +507,7 @@ namespace DynaModel.PipeCreation
 
             Sort.Quicksort(breps, 0, breps.Count - 1);
 
+            List<Brep> allTempBox = new List<Brep>();
             for (int i = breps.Count - 1; i > 0; i--)
             {
                 for (int j = i - 1; j >= 0; j--)
@@ -515,11 +517,14 @@ namespace DynaModel.PipeCreation
                     {
                         overlapBox = GetOverlapBoundingBox(breps[i], breps[j]);
                         if (overlapBox.ToBrep() != null)
+                        {
                             allTempBoxesGuid.Add(myDoc.Objects.Add(overlapBox.ToBrep()));
+                            allTempBox.Add(overlapBox.ToBrep());
+                        }  
                     }
                 }
-
             }
+            return allTempBox;
         }
 
         
@@ -530,165 +535,204 @@ namespace DynaModel.PipeCreation
         /// <param name="customized_part">The customized part that user wants</param>
         /// <param name="currModel">current model that the user wants to add pipe into</param>
         /// <param name="mode">1 = don't combine gears, 2 = combine gears</param>
-        private void GetVoxelSpace(Brep customized_part, Brep currModel, int mode)
+        private void GetVoxelSpace(Brep currModel, int mode, Brep customized_part = null, List<Brep> tempBoxes = null)
         {
-            var allObjects = new List<RhinoObject>(myDoc.Objects.GetObjectList(ObjectType.Brep));
-            Guid customized_part_Guid = Guid.Empty;
-            Guid currModel_Guid = Guid.Empty;
-
-            foreach (var item in allObjects)
+            if (mode == 1)
             {
-                Guid guid = item.Id;
-                ObjRef currObj = new ObjRef(guid);
-                Brep brep = currObj.Brep();
-                if (brep != null)
+                var allObjects = new List<RhinoObject>(myDoc.Objects.GetObjectList(ObjectType.Brep));
+                Guid customized_part_Guid = Guid.Empty;
+                Guid currModel_Guid = Guid.Empty;
+
+                foreach (var item in allObjects)
                 {
-                    if (brep.IsDuplicate(currModel, myDoc.ModelAbsoluteTolerance))
+                    Guid guid = item.Id;
+                    ObjRef currObj = new ObjRef(guid);
+                    Brep brep = currObj.Brep();
+                    if (brep != null)
                     {
-                        currModel_Guid = guid;
+                        if (brep.IsDuplicate(currModel, myDoc.ModelAbsoluteTolerance))
+                        {
+                            currModel_Guid = guid;
+                        }
+                        if (brep.IsDuplicate(customized_part, myDoc.ModelAbsoluteTolerance))
+                        {
+                            customized_part_Guid = guid;
+                        }
                     }
-                    if (brep.IsDuplicate(customized_part, myDoc.ModelAbsoluteTolerance))
-                    {
-                        customized_part_Guid = guid;
-                    }
+
                 }
 
-            }
+
+
+                BoundingBox boundingBox = currModel.GetBoundingBox(true);
+
+                int w = (int)Math.Abs(boundingBox.Max.X - boundingBox.Min.X) * voxelSpace_offset; //width
+                int l = (int)Math.Abs(boundingBox.Max.Y - boundingBox.Min.Y) * voxelSpace_offset; //length
+                int h = (int)Math.Abs(boundingBox.Max.Z - boundingBox.Min.Z) * voxelSpace_offset; //height
 
 
 
-            BoundingBox boundingBox = currModel.GetBoundingBox(true);
+                voxelSpace = new Voxel[w, l, h];
 
-            int w = (int)Math.Abs(boundingBox.Max.X - boundingBox.Min.X) * voxelSpace_offset; //width
-            int l = (int)Math.Abs(boundingBox.Max.Y - boundingBox.Min.Y) * voxelSpace_offset; //length
-            int h = (int)Math.Abs(boundingBox.Max.Z - boundingBox.Min.Z) * voxelSpace_offset; //height
+                double offset_spacer = 1 / voxelSpace_offset;
 
-
-
-            voxelSpace = new Voxel[w, l, h];
-
-            double offset_spacer = 1 / voxelSpace_offset;
-
-            #region Initialize the voxel space element-wise
-            Parallel.For(0, w, i =>
-            {
-                for (int j = 0; j < l; j++)
+                #region Initialize the voxel space element-wise
+                Parallel.For(0, w, i =>
                 {
-                    double baseX = i + boundingBox.Min.X;
-                    double baseY = j + boundingBox.Min.Y;
-
-
-                    Point3d basePoint = new Point3d(baseX, baseY, boundingBox.Min.Z - 1);
-                    Point3d topPoint = new Point3d(baseX, baseY, boundingBox.Max.Z + 1);
-                    Curve intersector = (new Line(basePoint, topPoint)).ToNurbsCurve();
-                    int num_region = 0;
-                    if (Intersection.CurveBrep(intersector, currModel, myDoc.ModelAbsoluteTolerance, out Curve[] overlapCurves, out Point3d[] intersectionPoints))
+                    for (int j = 0; j < l; j++)
                     {
-                        num_region = intersectionPoints.Length % 2;
-                    }
+                        double baseX = i + boundingBox.Min.X;
+                        double baseY = j + boundingBox.Min.Y;
 
-                    //Fix cases where the intersector intersect the brep at an edge
-                    if (intersectionPoints != null && intersectionPoints.Length > 1)
-                    {
-                        Point3dList hit_points = new Point3dList(intersectionPoints);
-                        hit_points.Sort();
-                        Point3d hit = hit_points.Last();
-                        List<Point3d> toRemoved_hit_points = new List<Point3d>();
-                        for (int p = hit_points.Count - 2; p >= 0; p--)
+
+                        Point3d basePoint = new Point3d(baseX, baseY, boundingBox.Min.Z - 1);
+                        Point3d topPoint = new Point3d(baseX, baseY, boundingBox.Max.Z + 1);
+                        Curve intersector = (new Line(basePoint, topPoint)).ToNurbsCurve();
+                        int num_region = 0;
+                        if (Intersection.CurveBrep(intersector, currModel, myDoc.ModelAbsoluteTolerance, out Curve[] overlapCurves, out Point3d[] intersectionPoints))
                         {
-                            if (hit_points[p].DistanceTo(hit) < myDoc.ModelAbsoluteTolerance)
+                            num_region = intersectionPoints.Length % 2;
+                        }
+
+                        //Fix cases where the intersector intersect the brep at an edge
+                        if (intersectionPoints != null && intersectionPoints.Length > 1)
+                        {
+                            Point3dList hit_points = new Point3dList(intersectionPoints);
+                            hit_points.Sort();
+                            Point3d hit = hit_points.Last();
+                            List<Point3d> toRemoved_hit_points = new List<Point3d>();
+                            for (int p = hit_points.Count - 2; p >= 0; p--)
                             {
-                                toRemoved_hit_points.Add(hit);
-                                toRemoved_hit_points.Add(hit_points[p]);
+                                if (hit_points[p].DistanceTo(hit) < myDoc.ModelAbsoluteTolerance)
+                                {
+                                    toRemoved_hit_points.Add(hit);
+                                    toRemoved_hit_points.Add(hit_points[p]);
+                                }
+                                else
+                                    hit = hit_points[p];
+                            }
+                            foreach (var replicate in toRemoved_hit_points)
+                                hit_points.Remove(replicate);
+                            intersectionPoints = hit_points.ToArray();
+                            Sort.Quicksort(intersectionPoints, 0, intersectionPoints.Length - 1);
+                        }
+
+                        for (int k = 0; k < h; k++)
+                        {
+                            double currentZ = offset_spacer * k + boundingBox.Min.Z;
+                            Point3d currentPt = new Point3d(baseX, baseY, currentZ);
+                            voxelSpace[i, j, k] = new Voxel
+                            {
+                                X = baseX,
+                                Y = baseY,
+                                Z = currentZ,
+                                isTaken = true,
+                                Index = new Index(i, j, k),
+                                vector = new Vector3d(baseX, baseY, currentZ)
+                            };
+
+                            //Check if the current point is in the current model
+                            if (num_region == 0)
+                            {
+                                for (int r = 0; r < intersectionPoints.Length; r += 2)
+                                {
+                                    if (currentZ < intersectionPoints[r + 1].Z && currentZ > intersectionPoints[r].Z)
+                                    {
+                                        voxelSpace[i, j, k].isTaken = false;
+                                        break;
+                                    }
+                                }
                             }
                             else
-                                hit = hit_points[p];
-                        }
-                        foreach (var replicate in toRemoved_hit_points)
-                            hit_points.Remove(replicate);
-                        intersectionPoints = hit_points.ToArray();
-                        Sort.Quicksort(intersectionPoints, 0, intersectionPoints.Length - 1);
-                    }
-
-                    for (int k = 0; k < h; k++)
-                    {
-                        double currentZ = offset_spacer * k + boundingBox.Min.Z;
-                        Point3d currentPt = new Point3d(baseX, baseY, currentZ);
-                        voxelSpace[i, j, k] = new Voxel
-                        {
-                            X = baseX,
-                            Y = baseY,
-                            Z = currentZ,
-                            isTaken = true,
-                            Index = new Index(i, j, k),
-                            vector = new Vector3d(baseX, baseY, currentZ)
-                        };
-
-                        //Check if the current point is in the current model
-                        if (num_region == 0)
-                        {
-                            for (int r = 0; r < intersectionPoints.Length; r += 2)
                             {
-                                if (currentZ < intersectionPoints[r + 1].Z && currentZ > intersectionPoints[r].Z)
+                                voxelSpace[i, j, k].isTaken = !currModel.IsPointInside(currentPt, myDoc.ModelAbsoluteTolerance, true);
+                            }
+
+
+
+                            //Traverse all objects in the Rhino View to check for intersection. 
+                            Boolean intersected = false;
+                            Double maximumDistance = 3;//TODO: Try different distance metric to get better result. Euclidean: Math.Sqrt(Math.Pow((voxelSpace_offset + 1), 2) * 3)
+
+
+                            if (voxelSpace[i, j, k].isTaken == false)
+                            {
+                                foreach (var item in allObjects)
                                 {
-                                    voxelSpace[i, j, k].isTaken = false;
+                                    Guid guid = item.Id;
+                                    ObjRef currObj = new ObjRef(myDoc, guid);
+                                    Brep brep = currObj.Brep();
+
+
+
+                                    //See if the point is strictly inside of the brep
+                                    if (brep != null)
+                                    {
+                                        //Check if the current brep is the 3D model main body
+                                        if (guid == customized_part_Guid || guid == currModel_Guid)
+                                        {
+                                            continue;
+                                        }
+
+                                        if (brep.IsPointInside(currentPt, myDoc.ModelAbsoluteTolerance, true))
+                                        {
+                                            voxelSpace[i, j, k].isTaken = true;
+                                            break;
+                                        }
+
+                                        //See if the point is too close to the brep and will cause intersection after creating the pipe
+                                        if (brep.ClosestPoint(currentPt).DistanceTo(currentPt) <= maximumDistance)
+                                        {
+                                            voxelSpace[i, j, k].isTaken = true;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+
+                        }
+                    }
+                });
+                #endregion
+                
+            }
+            else if (mode == 2)
+            {
+                double maximumDistance = 4;
+                BoundingBox boundingBox = currModel.GetBoundingBox(true);
+
+                int w = (int)Math.Abs(boundingBox.Max.X - boundingBox.Min.X) * voxelSpace_offset; //width
+                int l = (int)Math.Abs(boundingBox.Max.Y - boundingBox.Min.Y) * voxelSpace_offset; //length
+                int h = (int)Math.Abs(boundingBox.Max.Z - boundingBox.Min.Z) * voxelSpace_offset; //height
+
+                
+                Parallel.For(0, w, i =>
+                {
+                    for (int j = 0; j < l; j++)
+                    {
+                        for (int k = 0; k < h; k++)
+                        {
+                            foreach (var brep in tempBoxes)
+                            {
+                                Point3d currentPt = new Point3d(voxelSpace[i,j,k].X, voxelSpace[i, j, k].Y, voxelSpace[i, j, k].Z);
+                                if (brep.IsPointInside(currentPt, myDoc.ModelAbsoluteTolerance, true))
+                                {
+                                    voxelSpace[i, j, k].isTaken = true;
+                                    break;
+                                }
+
+                                //See if the point is too close to the brep and will cause intersection after creating the pipe
+                                if (brep.ClosestPoint(currentPt).DistanceTo(currentPt) <= maximumDistance)
+                                {
+                                    voxelSpace[i, j, k].isTaken = true;
                                     break;
                                 }
                             }
                         }
-                        else
-                        {
-                            voxelSpace[i, j, k].isTaken = !currModel.IsPointInside(currentPt, myDoc.ModelAbsoluteTolerance, true);
-                        }
-
-
-
-                        //Traverse all objects in the Rhino View to check for intersection. 
-                        Boolean intersected = false;
-                        Double maximumDistance = 4;//TODO: Try different distance metric to get better result. Euclidean: Math.Sqrt(Math.Pow((voxelSpace_offset + 1), 2) * 3)
-
-                        if (mode == 1)
-                            maximumDistance = 3;
-
-                        if (voxelSpace[i, j, k].isTaken == false)
-                        {
-                            foreach (var item in allObjects)
-                            {
-                                Guid guid = item.Id;
-                                ObjRef currObj = new ObjRef(guid);
-                                Brep brep = currObj.Brep();
-
-
-
-                                //See if the point is strictly inside of the brep
-                                if (brep != null)
-                                {
-                                    //Check if the current brep is the 3D model main body
-                                    if (guid == customized_part_Guid || guid == currModel_Guid)
-                                    {
-                                        continue;
-                                    }
-
-                                    if (brep.IsPointInside(currentPt, myDoc.ModelAbsoluteTolerance, true))
-                                    {
-                                        voxelSpace[i, j, k].isTaken = true;
-                                        break;
-                                    }
-
-                                    //See if the point is too close to the brep and will cause intersection after creating the pipe
-                                    if (brep.ClosestPoint(currentPt).DistanceTo(currentPt) <= maximumDistance)
-                                    {
-                                        voxelSpace[i, j, k].isTaken = true;
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-
                     }
-                }
-            });
-            #endregion
+                });
+
+            }
         }
 
 
