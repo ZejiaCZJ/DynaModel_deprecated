@@ -36,6 +36,7 @@ namespace DynaModel
             pManager.AddBooleanParameter("LED Light", "Light", "Show elements for light", GH_ParamAccess.item);
             pManager.AddBooleanParameter("Rotational motion", "rotation", "Show elements for rotational motion", GH_ParamAccess.item);
             pManager.AddBooleanParameter("Translational motion", "translation", "Show elements for translational motion", GH_ParamAccess.item);
+            pManager.AddBooleanParameter("Air Pipe", "Air", "Show elements for air pipe", GH_ParamAccess.item);
         }
 
         /// <summary>
@@ -52,12 +53,13 @@ namespace DynaModel
             if (!DA.GetData(1, ref outputType))
                 return;
 
-            if(startButtonClicked && outputType.Equals("LED Light"))
+            if(startButtonClicked && (outputType.Equals("LED Light")))
             {
                 DA.SetData(0, outputType);
                 DA.SetData(1, true);
                 DA.SetData(2, false);
                 DA.SetData(3, false);
+                DA.SetData(4, false);
             }
             else if (startButtonClicked && outputType.Equals("Vibration"))
             {
@@ -65,6 +67,7 @@ namespace DynaModel
                 DA.SetData(1, false);
                 DA.SetData(2, false);
                 DA.SetData(3, true);
+                DA.SetData(4, false);
             }
             else if (startButtonClicked && outputType.Equals("Rotational Motion"))
             {
@@ -72,6 +75,7 @@ namespace DynaModel
                 DA.SetData(1, false);
                 DA.SetData(2, true);
                 DA.SetData(3, false);
+                DA.SetData(4, false);
             }
             else if (startButtonClicked && outputType.Equals("Translational Motion"))
             {
@@ -79,6 +83,15 @@ namespace DynaModel
                 DA.SetData(1, false);
                 DA.SetData(2, true);
                 DA.SetData(3, false);
+                DA.SetData(4, false);
+            }
+            else if (startButtonClicked && outputType.Equals("Air Pipe"))
+            {
+                DA.SetData(0, outputType);
+                DA.SetData(1, false);
+                DA.SetData(2, false);
+                DA.SetData(3, false);
+                DA.SetData(4, true);
             }
             else
             {
@@ -86,6 +99,7 @@ namespace DynaModel
                 DA.SetData(1, false);
                 DA.SetData(2, false);
                 DA.SetData(3, false);
+                DA.SetData(4, false);
             }
 
         }
